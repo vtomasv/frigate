@@ -1,0 +1,128 @@
+# =============================================================================
+# Frigate NVR - Configuración para Apple Silicon (M3 Max)
+# =============================================================================
+# Documentación: https://docs.frigate.video/configuration/
+# =============================================================================
+
+mqtt:
+  enabled: true
+  host: mqtt
+  port: 1883
+
+# -----------------------------------------------------------------------------
+# Detector: Apple Silicon vía ZMQ
+# -----------------------------------------------------------------------------
+# El detector corre NATIVO en macOS para aprovechar el Neural Engine (ANE).
+# Requiere que el Apple Silicon Detector esté corriendo antes de iniciar Frigate.
+# Repositorio: https://github.com/frigate-nvr/apple-silicon-detector
+detectors:
+  apple_silicon:
+    type: zmq
+    endpoint: tcp://host.docker.internal:5555
+
+# -----------------------------------------------------------------------------
+# Modelo de detección de objetos
+# -----------------------------------------------------------------------------
+# YOLOv9-t optimizado para Apple Silicon: ~8ms de inferencia en M3 Max
+model:
+  model_type: yolo-generic
+  width: 320
+  height: 320
+  input_tensor: nchw
+  input_dtype: float
+  path: /config/model_cache/yolo.onnx
+  labelmap_path: /labelmap/coco-80.txt
+
+# -----------------------------------------------------------------------------
+# FFmpeg: sin aceleración de hardware dentro del contenedor
+# -----------------------------------------------------------------------------
+ffmpeg:
+  hwaccel_args: []
+
+# -----------------------------------------------------------------------------
+# go2rtc: Restreaming de cámaras
+# -----------------------------------------------------------------------------
+go2rtc:
+  streams:
+    # Ejemplo: descomentar y ajustar con los datos de tu cámara
+    # camara_principal:
+    #   - rtsp://usuario:password@192.168.1.100:554/stream1
+    # camara_principal_sub:
+    #   - rtsp://usuario:password@192.168.1.100:554/stream2
+
+    # Stream de prueba (se puede usar para validar la instalación)
+    test_stream:
+      - ffmpeg:/media/frigate/car-stopping.mp4#video=h264#hardware#audio=aac
+
+# -----------------------------------------------------------------------------
+# Generative AI (Ollama)
+# -----------------------------------------------------------------------------
+# Descomentar cuando Ollama esté corriendo (nativo o en Docker)
+# genai:
+#   ollama_local:
+#     provider: ollama
+#     base_url: http://host.docker.internal:11434
+#     model: llava:13b
+#     roles:
+#       - vision
+#       - tools
+
+# -----------------------------------------------------------------------------
+# Cámaras
+# -----------------------------------------------------------------------------
+cameras:
+  # Cámara de prueba con video local (para validar la instalación)
+  test:
+    enabled: true
+    ffmpeg:
+      inputs:
+        - path: /media/frigate/car-stopping.mp4
+          input_args: -re -stream_loop -1 -fflags +genpts
+          roles:
+            - detect
+    detect:
+      enabled: true
+      width: 1920
+      height: 1080
+      fps: 5
+    objects:
+      track:
+        - person
+        - car
+        - dog
+        - cat
+
+  # Ejemplo de cámara IP real (descomentar y ajustar)
+  # camara_principal:
+  #   enabled: true
+  #   ffmpeg:
+  #     inputs:
+  #       - path: rtsp://127.0.0.1:8554/camara_principal
+  #         input_args: preset-rtsp-restream
+  #         roles:
+  #           - record
+  #       - path: rtsp://127.0.0.1:8554/camara_principal_sub
+  #         input_args: preset-rtsp-restream
+  #         roles:
+  #           - detect
+  #   detect:
+  #     enabled: true
+  #     width: 640
+  #     height: 480
+  #     fps: 5
+  #   objects:
+  #     track:
+  #       - person
+  #       - car
+  #       - dog
+  #       - cat
+  #   record:
+  #     enabled: true
+  #     alerts:
+  #       retain:
+  #         days: 10
+  #     detections:
+  #       retain:
+  #         days: 10
+
+version: 0.15-0

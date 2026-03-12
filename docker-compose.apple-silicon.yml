@@ -1,0 +1,79 @@
+# =============================================================================
+# Frigate NVR - Docker Compose para Apple Silicon (M3 Max)
+# =============================================================================
+# Este archivo levanta Frigate NVR optimizado para macOS con Apple Silicon.
+#
+# REQUISITOS PREVIOS:
+#   1. Docker Desktop para Mac instalado y corriendo
+#   2. Apple Silicon Detector corriendo nativamente en macOS (ver SETUP_MACOS.md)
+#   3. Modelo YOLO descargado en ./config/model_cache/
+#
+# USO:
+#   docker compose -f docker-compose.apple-silicon.yml up -d
+#
+# =============================================================================
+
+services:
+  # ---------------------------------------------------------------------------
+  # Frigate NVR
+  # ---------------------------------------------------------------------------
+  frigate:
+    container_name: frigate
+    restart: unless-stopped
+    stop_grace_period: 30s
+    image: ghcr.io/blakeblackshear/frigate:stable-standard-arm64
+    shm_size: "512mb"  # Suficiente para ~4 cámaras a 1080p (ajustar según necesidad)
+    ports:
+      - "8971:8971"     # UI autenticada (acceso principal)
+      - "5000:5000"     # API interna (solo para desarrollo)
+      - "8554:8554"     # RTSP restreaming
+      - "8555:8555/tcp" # WebRTC sobre TCP
+      - "8555:8555/udp" # WebRTC sobre UDP
+    volumes:
+      - ./config:/config
+      - ./storage:/media/frigate
+      - type: tmpfs
+        target: /tmp/cache
+        tmpfs:
+          size: 1000000000  # 1 GB para caché de segmentos de grabación
+    environment:
+      FRIGATE_RTSP_PASSWORD: "password"  # Cambiar en producción
+      # PLUS_API_KEY: ""                 # Descomentar si se usa Frigate+
+    # En macOS no se necesitan dispositivos de hardware (GPU/Coral/etc.)
+    # La detección se delega al Apple Silicon Detector nativo vía ZMQ
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    depends_on:
+      - mqtt
+
+  # ---------------------------------------------------------------------------
+  # MQTT Broker (Mosquitto)
+  # ---------------------------------------------------------------------------
+  mqtt:
+    container_name: mqtt
+    image: eclipse-mosquitto:2.0
+    restart: unless-stopped
+    ports:
+      - "1883:1883"
+    volumes:
+      - ./mqtt/config:/mosquitto/config
+      - ./mqtt/data:/mosquitto/data
+      - ./mqtt/log:/mosquitto/log
+
+  # ---------------------------------------------------------------------------
+  # Ollama - LLM local para GenAI (descripciones, análisis de video)
+  # ---------------------------------------------------------------------------
+  # Nota: Ollama en Docker en macOS NO tiene acceso a la GPU Metal.
+  # Para máximo rendimiento, se recomienda correr Ollama NATIVO en macOS
+  # y apuntar Frigate a http://host.docker.internal:11434
+  # Si prefieres la simplicidad de Docker (con rendimiento reducido):
+  ollama:
+    container_name: ollama
+    image: ollama/ollama:latest
+    restart: unless-stopped
+    ports:
+      - "11434:11434"
+    volumes:
+      - ./ollama/models:/root/.ollama
+    profiles:
+      - with-ollama  # Solo se levanta si se activa el perfil
