@@ -2,6 +2,11 @@
 # Frigate NVR - Configuración para Apple Silicon (M3 Max)
 # =============================================================================
 # Documentación: https://docs.frigate.video/configuration/
+#
+# Esta configuración está optimizada para:
+#   - Detector Apple Silicon vía ZMQ (contenedor o nativo)
+#   - Ollama corriendo localmente en macOS (puerto 11434)
+#   - Hardware: Apple M3 Max, 128 GB RAM
 # =============================================================================
 
 mqtt:
@@ -12,18 +17,19 @@ mqtt:
 # -----------------------------------------------------------------------------
 # Detector: Apple Silicon vía ZMQ
 # -----------------------------------------------------------------------------
-# El detector corre NATIVO en macOS para aprovechar el Neural Engine (ANE).
-# Requiere que el Apple Silicon Detector esté corriendo antes de iniciar Frigate.
-# Repositorio: https://github.com/frigate-nvr/apple-silicon-detector
+# Modo Docker:  el detector corre en el contenedor "frigate-detector"
+# Modo Nativo:  cambiar endpoint a tcp://host.docker.internal:5555
+#               y ejecutar ./scripts/start-detector-native.sh
 detectors:
   apple_silicon:
     type: zmq
-    endpoint: tcp://host.docker.internal:5555
+    endpoint: tcp://frigate-detector:5555
 
 # -----------------------------------------------------------------------------
 # Modelo de detección de objetos
 # -----------------------------------------------------------------------------
-# YOLOv9-t optimizado para Apple Silicon: ~8ms de inferencia en M3 Max
+# YOLOv9-t optimizado para Apple Silicon: ~8ms en Neural Engine (nativo)
+# ~25-40ms en CPUExecutionProvider ARM64 (Docker)
 model:
   model_type: yolo-generic
   width: 320
@@ -34,7 +40,7 @@ model:
   labelmap_path: /labelmap/coco-80.txt
 
 # -----------------------------------------------------------------------------
-# FFmpeg: sin aceleración de hardware dentro del contenedor
+# FFmpeg: sin aceleración de hardware dentro del contenedor Linux
 # -----------------------------------------------------------------------------
 ffmpeg:
   hwaccel_args: []
@@ -49,23 +55,28 @@ go2rtc:
     #   - rtsp://usuario:password@192.168.1.100:554/stream1
     # camara_principal_sub:
     #   - rtsp://usuario:password@192.168.1.100:554/stream2
-
-    # Stream de prueba (se puede usar para validar la instalación)
-    test_stream:
-      - ffmpeg:/media/frigate/car-stopping.mp4#video=h264#hardware#audio=aac
+    dummy: []
 
 # -----------------------------------------------------------------------------
-# Generative AI (Ollama)
+# Generative AI - Ollama local en macOS
 # -----------------------------------------------------------------------------
-# Descomentar cuando Ollama esté corriendo (nativo o en Docker)
-# genai:
-#   ollama_local:
-#     provider: ollama
-#     base_url: http://host.docker.internal:11434
-#     model: llava:13b
-#     roles:
-#       - vision
-#       - tools
+# Ollama debe estar corriendo en macOS con el modelo descargado:
+#   ollama pull llava:13b
+#
+# Para usar un modelo diferente, cambiar "model" abajo.
+# Modelos recomendados para vision: llava:13b, qwen3-vl:4b, llava:34b
+genai:
+  ollama_local:
+    provider: ollama
+    base_url: http://host.docker.internal:11434
+    model: llava:13b
+    roles:
+      - vision
+      - tools
+    provider_options:
+      keep_alive: -1
+      options:
+        num_ctx: 8192
 
 # -----------------------------------------------------------------------------
 # Cámaras
@@ -91,8 +102,15 @@ cameras:
         - car
         - dog
         - cat
+      genai:
+        enabled: true
+    review:
+      genai:
+        enabled: true
 
+  # -------------------------------------------------------------------------
   # Ejemplo de cámara IP real (descomentar y ajustar)
+  # -------------------------------------------------------------------------
   # camara_principal:
   #   enabled: true
   #   ffmpeg:
@@ -116,6 +134,11 @@ cameras:
   #       - car
   #       - dog
   #       - cat
+  #     genai:
+  #       enabled: true
+  #   review:
+  #     genai:
+  #       enabled: true
   #   record:
   #     enabled: true
   #     alerts:

@@ -1,0 +1,50 @@
+# =============================================================================
+# Apple Silicon Detector - Dockerfile
+# =============================================================================
+# Construye el detector de objetos basado en ONNX Runtime para Frigate.
+#
+# Dentro de Docker en macOS, CoreML/Neural Engine NO está disponible.
+# Este contenedor usa CPUExecutionProvider (ARM64 NEON optimizado).
+# Para máximo rendimiento con Neural Engine, ejecutar el detector nativo
+# en macOS usando el script scripts/start-detector-native.sh
+# =============================================================================
+
+FROM python:3.11-slim AS base
+
+# Evitar prompts interactivos
+ENV DEBIAN_FRONTEND=noninteractive
+ENV PYTHONUNBUFFERED=1
+
+# Instalar dependencias del sistema
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends \
+        libgl1 \
+        libglib2.0-0 \
+        libsm6 \
+        libxext6 \
+        libxrender-dev \
+        wget \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /opt/detector
+
+# Copiar requirements e instalar dependencias Python
+COPY docker/apple-silicon/requirements-detector.txt requirements.txt
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Copiar el código del detector
+COPY docker/apple-silicon/detector/ detector/
+
+# Crear directorio para modelos
+RUN mkdir -p models
+
+# Puerto ZMQ por defecto
+EXPOSE 5555
+
+# Healthcheck: verificar que el proceso Python está corriendo
+HEALTHCHECK --interval=30s --timeout=5s --retries=3 \
+    CMD pgrep -f "zmq_onnx_client" || exit 1
+
+# Ejecutar el detector con CPUExecutionProvider (ARM64 NEON optimizado)
+ENTRYPOINT ["python", "detector/zmq_onnx_client.py"]
+CMD ["--endpoint", "tcp://*:5555", "--providers", "CPUExecutionProvider"]

@@ -1,50 +1,97 @@
 # =============================================================================
-# Frigate NVR - Docker Compose para Apple Silicon (M3 Max)
+# Frigate NVR - Docker Compose Unificado para Apple Silicon (M3 Max)
 # =============================================================================
-# Este archivo levanta Frigate NVR optimizado para macOS con Apple Silicon.
 #
-# REQUISITOS PREVIOS:
-#   1. Docker Desktop para Mac instalado y corriendo
-#   2. Apple Silicon Detector corriendo nativamente en macOS (ver SETUP_MACOS.md)
-#   3. Modelo YOLO descargado en ./config/model_cache/
+# Este archivo construye y levanta todos los servicios necesarios para
+# ejecutar Frigate NVR en un Mac con Apple Silicon.
 #
-# USO:
-#   docker compose -f docker-compose.apple-silicon.yml up -d
+# ANTES DE INICIAR:
+#   1. Descargar el modelo:  ./scripts/download-model.sh
+#   2. Asegurarse de que Ollama está corriendo en macOS (puerto 11434)
+#
+# MODO 1 - Todo en Docker (más simple, sin Neural Engine):
+#   docker compose -f docker-compose.apple-silicon.yml up -d --build
+#
+# MODO 2 - Detector nativo + Frigate en Docker (máximo rendimiento):
+#   ./scripts/start-detector-native.sh   # En una terminal separada
+#   docker compose -f docker-compose.apple-silicon.yml up -d --build frigate mqtt
+#
+# ACCESO:
+#   Frigate UI:  http://localhost:8971
+#   Frigate API: http://localhost:5000
 #
 # =============================================================================
 
 services:
   # ---------------------------------------------------------------------------
-  # Frigate NVR
+  # Frigate NVR - Build desde fuentes
   # ---------------------------------------------------------------------------
   frigate:
     container_name: frigate
     restart: unless-stopped
     stop_grace_period: 30s
-    image: ghcr.io/blakeblackshear/frigate:stable-standard-arm64
-    shm_size: "512mb"  # Suficiente para ~4 cámaras a 1080p (ajustar según necesidad)
+    build:
+      context: .
+      dockerfile: docker/main/Dockerfile
+      target: frigate
+      platforms:
+        - linux/arm64
+    shm_size: "512mb"
     ports:
-      - "8971:8971"     # UI autenticada (acceso principal)
-      - "5000:5000"     # API interna (solo para desarrollo)
-      - "8554:8554"     # RTSP restreaming
-      - "8555:8555/tcp" # WebRTC sobre TCP
-      - "8555:8555/udp" # WebRTC sobre UDP
+      - "8971:8971"
+      - "5000:5000"
+      - "8554:8554"
+      - "8555:8555/tcp"
+      - "8555:8555/udp"
     volumes:
       - ./config:/config
       - ./storage:/media/frigate
       - type: tmpfs
         target: /tmp/cache
         tmpfs:
-          size: 1000000000  # 1 GB para caché de segmentos de grabación
+          size: 1000000000
     environment:
-      FRIGATE_RTSP_PASSWORD: "password"  # Cambiar en producción
-      # PLUS_API_KEY: ""                 # Descomentar si se usa Frigate+
-    # En macOS no se necesitan dispositivos de hardware (GPU/Coral/etc.)
-    # La detección se delega al Apple Silicon Detector nativo vía ZMQ
+      FRIGATE_RTSP_PASSWORD: "password"
     extra_hosts:
       - "host.docker.internal:host-gateway"
     depends_on:
-      - mqtt
+      mqtt:
+        condition: service_started
+      detector:
+        condition: service_started
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "--silent", "http://127.0.0.1:5000/api/version"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 300s
+
+  # ---------------------------------------------------------------------------
+  # Apple Silicon Detector - Build desde fuentes
+  # ---------------------------------------------------------------------------
+  # Dentro de Docker en macOS, CoreML/Neural Engine NO está disponible.
+  # Este contenedor usa CPUExecutionProvider (ARM64 NEON optimizado).
+  #
+  # Para usar el Neural Engine nativo, detener este servicio y ejecutar:
+  #   ./scripts/start-detector-native.sh
+  # ---------------------------------------------------------------------------
+  detector:
+    container_name: frigate-detector
+    restart: unless-stopped
+    build:
+      context: .
+      dockerfile: docker/apple-silicon/Dockerfile.detector
+      platforms:
+        - linux/arm64
+    ports:
+      - "5555:5555"
+    volumes:
+      - ./config/model_cache:/opt/detector/models
+    healthcheck:
+      test: ["CMD", "pgrep", "-f", "zmq_onnx_client"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
 
   # ---------------------------------------------------------------------------
   # MQTT Broker (Mosquitto)
@@ -56,24 +103,10 @@ services:
     ports:
       - "1883:1883"
     volumes:
-      - ./mqtt/config:/mosquitto/config
-      - ./mqtt/data:/mosquitto/data
-      - ./mqtt/log:/mosquitto/log
+      - ./mqtt/config/mosquitto.conf:/mosquitto/config/mosquitto.conf
+      - mqtt_data:/mosquitto/data
+      - mqtt_log:/mosquitto/log
 
-  # ---------------------------------------------------------------------------
-  # Ollama - LLM local para GenAI (descripciones, análisis de video)
-  # ---------------------------------------------------------------------------
-  # Nota: Ollama en Docker en macOS NO tiene acceso a la GPU Metal.
-  # Para máximo rendimiento, se recomienda correr Ollama NATIVO en macOS
-  # y apuntar Frigate a http://host.docker.internal:11434
-  # Si prefieres la simplicidad de Docker (con rendimiento reducido):
-  ollama:
-    container_name: ollama
-    image: ollama/ollama:latest
-    restart: unless-stopped
-    ports:
-      - "11434:11434"
-    volumes:
-      - ./ollama/models:/root/.ollama
-    profiles:
-      - with-ollama  # Solo se levanta si se activa el perfil
+volumes:
+  mqtt_data:
+  mqtt_log:
