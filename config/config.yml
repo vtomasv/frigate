@@ -62,7 +62,7 @@ go2rtc:
     # Video: person-bicycle-car-detection.mp4 (768x432, H.264, 12fps)
     # -------------------------------------------------------------------------
     video_prueba:
-      - "exec:/usr/lib/ffmpeg/ffmpeg -hide_banner -re -stream_loop -1 -i /config/test_video.mp4 -c copy -rtsp_transport tcp -f rtsp {{output}}"
+      - "exec:/usr/lib/ffmpeg/7.0/bin/ffmpeg -hide_banner -re -stream_loop -1 -i /config/test_video.mp4 -c copy -rtsp_transport tcp -f rtsp {{output}}"
 
     # -------------------------------------------------------------------------
     # Cámara de prueba 2: Webcam pública MJPEG (Japón)
