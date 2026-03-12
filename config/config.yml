@@ -7,6 +7,7 @@
 #   - Detector Apple Silicon vía ZMQ (contenedor o nativo)
 #   - Ollama corriendo localmente en macOS (puerto 11434)
 #   - Hardware: Apple M3 Max, 128 GB RAM
+#   - 7 cámaras de prueba (6 videos locales + 1 webcam pública)
 #
 # Versión de Frigate: 0.17.0 (stable-standard-arm64)
 # =============================================================================
@@ -52,33 +53,43 @@ ffmpeg:
 # -----------------------------------------------------------------------------
 # go2rtc: Restreaming de cámaras
 # -----------------------------------------------------------------------------
-# go2rtc soporta múltiples fuentes: RTSP, MJPEG, FFmpeg exec, etc.
+# Todos los videos locales se reproducen en loop infinito usando ffmpeg exec.
 # Documentación: https://github.com/AlexxIT/go2rtc
 go2rtc:
   streams:
-    # -------------------------------------------------------------------------
-    # Cámara de prueba 1: Video local con personas, bicicletas y autos
-    # Se reproduce en loop infinito usando ffmpeg dentro del contenedor.
-    # Video: person-bicycle-car-detection.mp4 (768x432, H.264, 12fps)
-    # -------------------------------------------------------------------------
-    video_prueba:
+    # Video 1: Calle con personas, bicicletas y autos (768x432, 12fps)
+    video_calle:
       - "exec:/usr/lib/ffmpeg/7.0/bin/ffmpeg -hide_banner -re -stream_loop -1 -i /config/test_video.mp4 -c copy -rtsp_transport tcp -f rtsp {{output}}"
 
-    # -------------------------------------------------------------------------
-    # Cámara de prueba 2: Webcam pública MJPEG (Japón)
-    # Stream en vivo de una cámara pública. Puede no estar disponible 24/7.
-    # -------------------------------------------------------------------------
+    # Video 2: Multitud de personas caminando (768x432, 12fps)
+    video_personas:
+      - "exec:/usr/lib/ffmpeg/7.0/bin/ffmpeg -hide_banner -re -stream_loop -1 -i /config/people-detection.mp4 -c copy -rtsp_transport tcp -f rtsp {{output}}"
+
+    # Video 3: Tráfico de autos en autopista (768x432, 12.5fps)
+    video_autopista:
+      - "exec:/usr/lib/ffmpeg/7.0/bin/ffmpeg -hide_banner -re -stream_loop -1 -i /config/car-detection.mp4 -c copy -rtsp_transport tcp -f rtsp {{output}}"
+
+    # Video 4: Personas pasando una por una - entrada/pasillo (768x432, 10fps)
+    video_entrada:
+      - "exec:/usr/lib/ffmpeg/7.0/bin/ffmpeg -hide_banner -re -stream_loop -1 -i /config/one-by-one-person-detection.mp4 -c copy -rtsp_transport tcp -f rtsp {{output}}"
+
+    # Video 5: Interior de tienda/retail - pasillo (720x404, 60fps)
+    video_tienda:
+      - "exec:/usr/lib/ffmpeg/7.0/bin/ffmpeg -hide_banner -re -stream_loop -1 -i /config/store-aisle-detection.mp4 -c copy -rtsp_transport tcp -f rtsp {{output}}"
+
+    # Video 6: Zona de trabajo exterior - trabajadores y vehículos (1920x1080, 60fps)
+    video_obra:
+      - "exec:/usr/lib/ffmpeg/7.0/bin/ffmpeg -hide_banner -re -stream_loop -1 -i /config/worker-zone-detection.mp4 -c copy -rtsp_transport tcp -f rtsp {{output}}"
+
+    # Video 7: Webcam pública MJPEG (Japón) - puede no estar disponible 24/7
     webcam_publica:
       - "http://honjin1.miemasu.net/nphMotionJpeg?Resolution=640x480&Quality=Standard"
-
 
     # -------------------------------------------------------------------------
     # Ejemplo de cámara IP real (descomentar y ajustar)
     # -------------------------------------------------------------------------
     # camara_principal:
     #   - rtsp://usuario:password@192.168.1.100:554/stream1
-    # camara_principal_sub:
-    #   - rtsp://usuario:password@192.168.1.100:554/stream2
 
 # -----------------------------------------------------------------------------
 # Generative AI - Ollama local en macOS
@@ -96,15 +107,15 @@ genai:
 # Cámaras
 # -----------------------------------------------------------------------------
 cameras:
-  # -------------------------------------------------------------------------
-  # Cámara de prueba 1: Video local en loop (personas, bicicletas, autos)
-  # Ideal para probar la detección de objetos sin hardware real.
-  # -------------------------------------------------------------------------
-  video_prueba:
+  # ---------------------------------------------------------------------------
+  # 1. Calle urbana: personas, bicicletas y autos
+  # Escena: Calle con tráfico mixto (peatones, ciclistas, vehículos)
+  # ---------------------------------------------------------------------------
+  video_calle:
     enabled: true
     ffmpeg:
       inputs:
-        - path: rtsp://127.0.0.1:8554/video_prueba
+        - path: rtsp://127.0.0.1:8554/video_calle
           input_args: preset-rtsp-restream
           roles:
             - detect
@@ -127,10 +138,159 @@ cameras:
     record:
       enabled: true
 
-  # -------------------------------------------------------------------------
-  # Cámara de prueba 2: Webcam pública MJPEG
+  # ---------------------------------------------------------------------------
+  # 2. Multitud de personas caminando
+  # Escena: Zona peatonal con múltiples personas en movimiento
+  # ---------------------------------------------------------------------------
+  video_personas:
+    enabled: true
+    ffmpeg:
+      inputs:
+        - path: rtsp://127.0.0.1:8554/video_personas
+          input_args: preset-rtsp-restream
+          roles:
+            - detect
+            - record
+    detect:
+      enabled: true
+      width: 768
+      height: 432
+      fps: 5
+    objects:
+      track:
+        - person
+      genai:
+        enabled: true
+    review:
+      genai:
+        enabled: true
+    record:
+      enabled: true
+
+  # ---------------------------------------------------------------------------
+  # 3. Autopista: tráfico de vehículos
+  # Escena: Carretera con autos circulando
+  # ---------------------------------------------------------------------------
+  video_autopista:
+    enabled: true
+    ffmpeg:
+      inputs:
+        - path: rtsp://127.0.0.1:8554/video_autopista
+          input_args: preset-rtsp-restream
+          roles:
+            - detect
+            - record
+    detect:
+      enabled: true
+      width: 768
+      height: 432
+      fps: 5
+    objects:
+      track:
+        - car
+        - truck
+        - bus
+      genai:
+        enabled: true
+    review:
+      genai:
+        enabled: true
+    record:
+      enabled: true
+
+  # ---------------------------------------------------------------------------
+  # 4. Entrada/pasillo: personas pasando una por una
+  # Escena: Punto de acceso con personas entrando secuencialmente
+  # ---------------------------------------------------------------------------
+  video_entrada:
+    enabled: true
+    ffmpeg:
+      inputs:
+        - path: rtsp://127.0.0.1:8554/video_entrada
+          input_args: preset-rtsp-restream
+          roles:
+            - detect
+            - record
+    detect:
+      enabled: true
+      width: 768
+      height: 432
+      fps: 5
+    objects:
+      track:
+        - person
+      genai:
+        enabled: true
+    review:
+      genai:
+        enabled: true
+    record:
+      enabled: true
+
+  # ---------------------------------------------------------------------------
+  # 5. Interior de tienda/retail
+  # Escena: Pasillo de tienda con personas comprando
+  # ---------------------------------------------------------------------------
+  video_tienda:
+    enabled: true
+    ffmpeg:
+      inputs:
+        - path: rtsp://127.0.0.1:8554/video_tienda
+          input_args: preset-rtsp-restream
+          roles:
+            - detect
+            - record
+    detect:
+      enabled: true
+      width: 720
+      height: 404
+      fps: 5
+    objects:
+      track:
+        - person
+      genai:
+        enabled: true
+    review:
+      genai:
+        enabled: true
+    record:
+      enabled: true
+
+  # ---------------------------------------------------------------------------
+  # 6. Zona de obra/trabajo exterior
+  # Escena: Sitio de construcción con trabajadores y vehículos pesados
+  # ---------------------------------------------------------------------------
+  video_obra:
+    enabled: true
+    ffmpeg:
+      inputs:
+        - path: rtsp://127.0.0.1:8554/video_obra
+          input_args: preset-rtsp-restream
+          roles:
+            - detect
+            - record
+    detect:
+      enabled: true
+      width: 1920
+      height: 1080
+      fps: 5
+    objects:
+      track:
+        - person
+        - car
+        - truck
+      genai:
+        enabled: true
+    review:
+      genai:
+        enabled: true
+    record:
+      enabled: true
+
+  # ---------------------------------------------------------------------------
+  # 7. Webcam pública MJPEG (Japón)
   # Stream en vivo. Puede tener latencia o no estar disponible 24/7.
-  # -------------------------------------------------------------------------
+  # ---------------------------------------------------------------------------
   webcam_publica:
     enabled: true
     ffmpeg:
@@ -149,7 +309,6 @@ cameras:
         - person
         - car
 
-
   # -------------------------------------------------------------------------
   # Ejemplo de cámara IP real (descomentar y ajustar)
   # -------------------------------------------------------------------------
@@ -160,11 +319,8 @@ cameras:
   #       - path: rtsp://127.0.0.1:8554/camara_principal
   #         input_args: preset-rtsp-restream
   #         roles:
-  #           - record
-  #       - path: rtsp://127.0.0.1:8554/camara_principal_sub
-  #         input_args: preset-rtsp-restream
-  #         roles:
   #           - detect
+  #           - record
   #   detect:
   #     enabled: true
   #     width: 640
@@ -183,11 +339,5 @@ cameras:
   #       enabled: true
   #   record:
   #     enabled: true
-  #     alerts:
-  #       retain:
-  #         days: 10
-  #     detections:
-  #       retain:
-  #         days: 10
 
 version: 0.17-0

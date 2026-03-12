@@ -6,7 +6,7 @@
 # Este script:
 #   1. Crea los directorios necesarios
 #   2. Descarga el modelo YOLOv9-t si no existe
-#   3. Descarga el video de prueba para la cámara simulada
+#   3. Descarga los videos de prueba para las cámaras simuladas
 #   4. Verifica que Ollama esté corriendo
 # =============================================================================
 set -e
@@ -39,17 +39,35 @@ else
     echo "  OK - Modelo descargado"
 fi
 
-# 3. Descargar video de prueba (personas, bicicletas, autos)
-VIDEO_FILE="config/test_video.mp4"
-VIDEO_URL="https://github.com/intel-iot-devkit/sample-videos/raw/master/person-bicycle-car-detection.mp4"
+# 3. Descargar videos de prueba
+INTEL_BASE="https://github.com/intel-iot-devkit/sample-videos/raw/master"
 
-if [ -f "$VIDEO_FILE" ]; then
-    echo "[3/4] Video de prueba ya existe en $VIDEO_FILE"
-else
-    echo "[3/4] Descargando video de prueba (personas, bicicletas, autos)..."
-    wget -q --show-progress "$VIDEO_URL" -O "$VIDEO_FILE"
-    echo "  OK - Video descargado (768x432, H.264, 12fps, ~54s)"
-fi
+declare -A VIDEOS=(
+    ["config/test_video.mp4"]="$INTEL_BASE/person-bicycle-car-detection.mp4|Calle: personas, bicicletas, autos (768x432)"
+    ["config/people-detection.mp4"]="$INTEL_BASE/people-detection.mp4|Multitud de personas caminando (768x432)"
+    ["config/car-detection.mp4"]="$INTEL_BASE/car-detection.mp4|Autopista: tráfico de vehículos (768x432)"
+    ["config/one-by-one-person-detection.mp4"]="$INTEL_BASE/one-by-one-person-detection.mp4|Entrada: personas pasando una por una (768x432)"
+    ["config/store-aisle-detection.mp4"]="$INTEL_BASE/store-aisle-detection.mp4|Tienda: pasillo interior retail (720x404)"
+    ["config/worker-zone-detection.mp4"]="$INTEL_BASE/worker-zone-detection.mp4|Obra: zona de trabajo exterior (1920x1080)"
+)
+
+TOTAL_VIDEOS=${#VIDEOS[@]}
+CURRENT=0
+DOWNLOADED=0
+
+echo "[3/4] Verificando $TOTAL_VIDEOS videos de prueba..."
+for FILE in "${!VIDEOS[@]}"; do
+    CURRENT=$((CURRENT + 1))
+    IFS='|' read -r URL DESC <<< "${VIDEOS[$FILE]}"
+    if [ -f "$FILE" ]; then
+        echo "  [$CURRENT/$TOTAL_VIDEOS] Ya existe: $DESC"
+    else
+        echo "  [$CURRENT/$TOTAL_VIDEOS] Descargando: $DESC"
+        wget -q --show-progress "$URL" -O "$FILE"
+        DOWNLOADED=$((DOWNLOADED + 1))
+    fi
+done
+echo "  OK - $DOWNLOADED videos nuevos descargados ($TOTAL_VIDEOS total)"
 
 # 4. Verificar Ollama
 echo "[4/4] Verificando Ollama..."
@@ -74,10 +92,15 @@ echo " Setup completado. Para iniciar Frigate:"
 echo ""
 echo "   docker compose -f docker-compose.apple-silicon.yml up -d"
 echo ""
-echo " Cámaras de prueba configuradas:"
-echo "   - video_prueba: Video local en loop (personas/autos/bicicletas)"
-echo "   - webcam_publica: Webcam MJPEG pública (Japón)"
-echo "   - wowza_test: Stream RTSP de Wowza (video de represa)"
+echo " Cámaras de prueba configuradas (7 total):"
+echo "   1. video_calle      - Calle con personas, bicicletas, autos"
+echo "   2. video_personas   - Multitud de personas caminando"
+echo "   3. video_autopista  - Tráfico de vehículos en autopista"
+echo "   4. video_entrada    - Personas pasando una por una"
+echo "   5. video_tienda     - Interior de tienda/retail"
+echo "   6. video_obra       - Zona de trabajo exterior (1080p)"
+echo "   7. webcam_publica   - Webcam MJPEG en vivo (Japón)"
 echo ""
+echo " Todas las cámaras tienen GenAI habilitado (Ollama)."
 echo " Acceso: http://localhost:8971"
 echo "============================================="
