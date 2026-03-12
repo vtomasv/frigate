@@ -1,6 +1,6 @@
 # Guía de Instalación: Frigate NVR en macOS con Apple Silicon (M3 Max)
 
-Esta guía detalla los pasos para levantar Frigate NVR en un Mac con Apple Silicon, construyendo todos los servicios desde sus fuentes con Docker Compose.
+Esta guía detalla los pasos para levantar Frigate NVR en un Mac con Apple Silicon, usando la imagen oficial pre-compilada de Frigate junto con un detector ONNX construido desde fuentes.
 
 ## Arquitectura
 
@@ -8,11 +8,11 @@ El sistema consta de tres servicios orquestados por Docker Compose:
 
 | Servicio | Contenedor | Descripción |
 |:---|:---|:---|
-| **Frigate NVR** | `frigate` | NVR principal con UI, grabación y detección de objetos. Se construye desde el Dockerfile oficial. |
-| **Apple Silicon Detector** | `frigate-detector` | Servidor ZMQ que ejecuta inferencia ONNX Runtime. Se construye desde un Dockerfile personalizado. |
+| **Frigate NVR** | `frigate` | NVR principal. Usa la imagen oficial `stable-standard-arm64`. |
+| **Apple Silicon Detector** | `frigate-detector` | Servidor ZMQ con ONNX Runtime. Se construye desde Dockerfile. |
 | **Mosquitto MQTT** | `mqtt` | Broker MQTT para comunicación de eventos. Imagen oficial. |
 
-Adicionalmente, **Ollama** corre de forma nativa en macOS (fuera de Docker) para las funciones de GenAI (descripciones de objetos, resúmenes de eventos).
+Adicionalmente, **Ollama** corre de forma nativa en macOS (fuera de Docker) para las funciones de GenAI.
 
 ```
 ┌─────────────────────────────────────────────────────────┐
@@ -56,15 +56,13 @@ cd frigate
 git checkout feature/apple-silicon-llm-integration
 ```
 
-## 3. Preparar el Modelo de Detección
+## 3. Ejecutar el Script de Preparación
 
-Descarga el modelo YOLOv9-t optimizado para inferencia rápida:
+El script `setup.sh` descarga el modelo, crea los directorios necesarios y verifica Ollama:
 
 ```bash
-./scripts/download-model.sh
+./scripts/setup.sh
 ```
-
-Esto descarga el modelo ONNX en `config/model_cache/yolo.onnx`.
 
 ## 4. Preparar Ollama
 
@@ -74,44 +72,44 @@ Asegúrate de que Ollama está corriendo y descarga el modelo de visión:
 # Verificar que Ollama está corriendo
 ollama list
 
-# Descargar el modelo de visión (elige uno)
-ollama pull llava:13b          # Recomendado: buen balance calidad/velocidad
-# ollama pull qwen3-vl:4b      # Alternativa más ligera
-# ollama pull llava:34b         # Alternativa más potente (requiere ~24GB RAM)
+# Descargar el modelo de visión
+ollama pull llava:13b
 ```
 
 ## 5. Levantar Todo con Docker Compose
 
 ### Modo 1: Todo en Docker (más simple)
 
-Este modo construye y levanta los tres servicios. El detector usa `CPUExecutionProvider` (ARM64 NEON), que es más lento que el Neural Engine pero no requiere nada fuera de Docker.
+Este modo usa la imagen oficial de Frigate (`stable-standard-arm64`) y construye el detector. El detector usa `CPUExecutionProvider` (ARM64 NEON), que es más lento que el Neural Engine pero no requiere nada fuera de Docker.
 
 ```bash
-docker compose -f docker-compose.apple-silicon.yml up -d --build
+docker compose -f docker-compose.apple-silicon.yml up -d
 ```
 
-El primer build tardará varios minutos (Frigate compila muchas dependencias). Los builds posteriores serán más rápidos gracias al caché de Docker.
+El primer inicio descargará la imagen de Frigate (~2 GB) y construirá el detector. Los inicios posteriores serán instantáneos.
 
 ### Modo 2: Detector nativo + Frigate en Docker (máximo rendimiento)
 
-Para aprovechar el Neural Engine del M3 Max (~8ms por inferencia vs ~25-40ms en CPU), ejecuta el detector de forma nativa en macOS:
+Para aprovechar el Neural Engine del M3 Max (~8ms por inferencia vs ~25-40ms en CPU):
 
-```bash
-# Terminal 1: Iniciar el detector nativo
-./scripts/start-detector-native.sh
+1. Edita `config/config.yml` y cambia el endpoint del detector:
 
-# Terminal 2: Levantar solo Frigate y MQTT
-docker compose -f docker-compose.apple-silicon.yml up -d --build frigate mqtt
-```
+    ```yaml
+    detectors:
+      apple_silicon:
+        type: zmq
+        endpoint: tcp://host.docker.internal:5555  # Apunta al detector nativo
+    ```
 
-En este modo, edita `config/config.yml` y cambia el endpoint del detector:
+2. Inicia el detector nativo y luego Frigate:
 
-```yaml
-detectors:
-  apple_silicon:
-    type: zmq
-    endpoint: tcp://host.docker.internal:5555  # Apunta al detector nativo
-```
+    ```bash
+    # Terminal 1: Iniciar el detector nativo
+    ./scripts/start-detector-native.sh
+
+    # Terminal 2: Levantar solo Frigate y MQTT (sin el detector Docker)
+    docker compose -f docker-compose.apple-silicon.yml up -d frigate mqtt
+    ```
 
 ## 6. Verificación
 
@@ -120,8 +118,6 @@ detectors:
     ```bash
     docker compose -f docker-compose.apple-silicon.yml ps
     ```
-
-    Deberías ver los servicios `frigate`, `frigate-detector` y `mqtt` corriendo.
 
 2. **Acceder a la interfaz de Frigate:**
 
@@ -137,7 +133,7 @@ detectors:
     docker compose -f docker-compose.apple-silicon.yml logs -f detector
     ```
 
-## 7. Configurar Cámaras IP Reales
+## 7. Configurar Cámaras IP
 
 Edita `config/config.yml` para añadir tus cámaras. Ejemplo para una cámara RTSP:
 
@@ -190,7 +186,7 @@ docker compose -f docker-compose.apple-silicon.yml restart frigate
 
 | Comando | Descripción |
 |:---|:---|
-| `docker compose -f docker-compose.apple-silicon.yml up -d --build` | Construir e iniciar todos los servicios |
+| `docker compose -f docker-compose.apple-silicon.yml up -d` | Iniciar todos los servicios |
 | `docker compose -f docker-compose.apple-silicon.yml down` | Detener todos los servicios |
 | `docker compose -f docker-compose.apple-silicon.yml logs -f` | Ver logs en tiempo real |
 | `docker compose -f docker-compose.apple-silicon.yml restart frigate` | Reiniciar solo Frigate |
@@ -202,6 +198,6 @@ docker compose -f docker-compose.apple-silicon.yml restart frigate
 
 **Ollama no conecta:** Verifica que Ollama está corriendo (`ollama list`) y que el modelo está descargado. Frigate se conecta via `host.docker.internal:11434`.
 
-**Build de Frigate falla:** Asegúrate de tener suficiente espacio en disco (~10 GB) y que Docker Desktop tiene al menos 8 GB de RAM asignados.
-
 **Rendimiento lento en detección:** Considera usar el Modo 2 (detector nativo) para aprovechar el Neural Engine del M3 Max.
+
+**Frigate no encuentra cámaras:** Asegúrate de haber configurado al menos una cámara habilitada en `config/config.yml` y reinicia el contenedor.

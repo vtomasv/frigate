@@ -6,7 +6,7 @@
 # ejecutar Frigate NVR en un Mac con Apple Silicon.
 #
 # ANTES DE INICIAR:
-#   1. Descargar el modelo:  ./scripts/download-model.sh
+#   1. Preparar el entorno:  ./scripts/setup.sh
 #   2. Asegurarse de que Ollama está corriendo en macOS (puerto 11434)
 #
 # MODO 1 - Todo en Docker (más simple, sin Neural Engine):
@@ -30,12 +30,7 @@ services:
     container_name: frigate
     restart: unless-stopped
     stop_grace_period: 30s
-    build:
-      context: .
-      dockerfile: docker/main/Dockerfile
-      target: frigate
-      platforms:
-        - linux/arm64
+    image: ghcr.io/blakeblackshear/frigate:stable-standard-arm64
     shm_size: "512mb"
     ports:
       - "8971:8971"

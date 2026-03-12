@@ -17,9 +17,12 @@ mqtt:
 # -----------------------------------------------------------------------------
 # Detector: Apple Silicon vía ZMQ
 # -----------------------------------------------------------------------------
-# Modo Docker:  el detector corre en el contenedor "frigate-detector"
-# Modo Nativo:  cambiar endpoint a tcp://host.docker.internal:5555
-#               y ejecutar ./scripts/start-detector-native.sh
+# Modo Docker (por defecto): el detector corre en el contenedor "frigate-detector"
+#   endpoint: tcp://frigate-detector:5555
+#
+# Modo Nativo (máximo rendimiento): cambiar a:
+#   endpoint: tcp://host.docker.internal:5555
+#   y ejecutar ./scripts/start-detector-native.sh
 detectors:
   apple_silicon:
     type: zmq
@@ -28,8 +31,7 @@ detectors:
 # -----------------------------------------------------------------------------
 # Modelo de detección de objetos
 # -----------------------------------------------------------------------------
-# YOLOv9-t optimizado para Apple Silicon: ~8ms en Neural Engine (nativo)
-# ~25-40ms en CPUExecutionProvider ARM64 (Docker)
+# YOLOv9-t optimizado: ~8ms en Neural Engine (nativo), ~25-40ms en CPU (Docker)
 model:
   model_type: yolo-generic
   width: 320
@@ -63,7 +65,6 @@ go2rtc:
 # Ollama debe estar corriendo en macOS con el modelo descargado:
 #   ollama pull llava:13b
 #
-# Para usar un modelo diferente, cambiar "model" abajo.
 # Modelos recomendados para vision: llava:13b, qwen3-vl:4b, llava:34b
 genai:
   ollama_local:
@@ -82,32 +83,6 @@ genai:
 # Cámaras
 # -----------------------------------------------------------------------------
 cameras:
-  # Cámara de prueba con video local (para validar la instalación)
-  test:
-    enabled: true
-    ffmpeg:
-      inputs:
-        - path: /media/frigate/car-stopping.mp4
-          input_args: -re -stream_loop -1 -fflags +genpts
-          roles:
-            - detect
-    detect:
-      enabled: true
-      width: 1920
-      height: 1080
-      fps: 5
-    objects:
-      track:
-        - person
-        - car
-        - dog
-        - cat
-      genai:
-        enabled: true
-    review:
-      genai:
-        enabled: true
-
   # -------------------------------------------------------------------------
   # Ejemplo de cámara IP real (descomentar y ajustar)
   # -------------------------------------------------------------------------
@@ -147,5 +122,15 @@ cameras:
   #     detections:
   #       retain:
   #         days: 10
+
+  # Cámara dummy (requerida para que Frigate inicie)
+  # Reemplazar con una cámara real cuando esté disponible
+  dummy:
+    enabled: false
+    ffmpeg:
+      inputs:
+        - path: rtsp://127.0.0.1:8554/dummy
+          roles:
+            - detect
 
 version: 0.15-0
