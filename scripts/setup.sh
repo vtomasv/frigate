@@ -5,7 +5,7 @@
 # Ejecutar antes de levantar Docker Compose por primera vez.
 # Este script:
 #   1. Crea los directorios necesarios
-#   2. Descarga el modelo YOLOv9-t si no existe
+#   2. Descarga el modelo YOLOv8n ONNX si no existe
 #   3. Descarga los videos de prueba para las cámaras simuladas
 #   4. Verifica que Ollama esté corriendo
 # =============================================================================
@@ -29,14 +29,44 @@ echo "  OK"
 
 # 2. Descargar modelo YOLO
 MODEL_FILE="config/model_cache/yolo.onnx"
-MODEL_URL="https://github.com/thomas-gall/frigate-yolov9-models/raw/main/yolov9-t-320.onnx"
+MODEL_URL="https://github.com/vtomasv/frigate/releases/download/v0.17.0-apple-silicon/yolov8n.onnx"
+MODEL_SIZE_MIN=10000000  # 10MB mínimo para un modelo ONNX válido
+
+download_model() {
+    echo "  Descargando modelo YOLOv8n ONNX (320x320, ~12MB)..."
+    wget -q --show-progress -L "$MODEL_URL" -O "$MODEL_FILE"
+
+    # Verificar que el archivo no esté vacío o corrupto
+    if [ ! -s "$MODEL_FILE" ]; then
+        echo "  ERROR: El archivo descargado está vacío."
+        rm -f "$MODEL_FILE"
+        return 1
+    fi
+
+    FILE_SIZE=$(stat -f%z "$MODEL_FILE" 2>/dev/null || stat -c%s "$MODEL_FILE" 2>/dev/null || echo "0")
+    if [ "$FILE_SIZE" -lt "$MODEL_SIZE_MIN" ]; then
+        echo "  ERROR: El archivo descargado es demasiado pequeño ($FILE_SIZE bytes)."
+        echo "  Puede ser una página HTML en vez del modelo. Eliminando..."
+        rm -f "$MODEL_FILE"
+        return 1
+    fi
+
+    echo "  OK - Modelo descargado ($FILE_SIZE bytes)"
+    return 0
+}
 
 if [ -f "$MODEL_FILE" ]; then
-    echo "[2/4] Modelo YOLOv9-t ya existe en $MODEL_FILE"
+    FILE_SIZE=$(stat -f%z "$MODEL_FILE" 2>/dev/null || stat -c%s "$MODEL_FILE" 2>/dev/null || echo "0")
+    if [ "$FILE_SIZE" -lt "$MODEL_SIZE_MIN" ]; then
+        echo "[2/4] Modelo existente parece corrupto ($FILE_SIZE bytes). Re-descargando..."
+        rm -f "$MODEL_FILE"
+        download_model || echo "  FALLO: No se pudo descargar el modelo. Ver instrucciones manuales abajo."
+    else
+        echo "[2/4] Modelo YOLOv8n ya existe en $MODEL_FILE ($FILE_SIZE bytes)"
+    fi
 else
-    echo "[2/4] Descargando modelo YOLOv9-t (320x320)..."
-    wget -q --show-progress "$MODEL_URL" -O "$MODEL_FILE"
-    echo "  OK - Modelo descargado"
+    echo "[2/4] Descargando modelo YOLOv8n ONNX..."
+    download_model || echo "  FALLO: No se pudo descargar el modelo. Ver instrucciones manuales abajo."
 fi
 
 # 3. Descargar videos de prueba
@@ -90,7 +120,7 @@ echo ""
 echo "============================================="
 echo " Setup completado. Para iniciar Frigate:"
 echo ""
-echo "   docker compose -f docker-compose.apple-silicon.yml up -d"
+echo "   docker compose -f docker-compose.apple-silicon.yml up -d --build"
 echo ""
 echo " Cámaras de prueba configuradas (7 total):"
 echo "   1. video_calle      - Calle con personas, bicicletas, autos"
@@ -103,4 +133,9 @@ echo "   7. webcam_publica   - Webcam MJPEG en vivo (Japón)"
 echo ""
 echo " Todas las cámaras tienen GenAI habilitado (Ollama)."
 echo " Acceso: http://localhost:8971"
+echo ""
+echo " Si el modelo no se descargó correctamente, puedes generarlo manualmente:"
+echo "   pip install ultralytics"
+echo "   python -c \"from ultralytics import YOLO; YOLO('yolov8n.pt').export(format='onnx', imgsz=320)\""
+echo "   cp yolov8n.onnx config/model_cache/yolo.onnx"
 echo "============================================="

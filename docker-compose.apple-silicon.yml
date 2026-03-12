@@ -54,7 +54,7 @@ services:
       mqtt:
         condition: service_started
       detector:
-        condition: service_healthy
+        condition: service_started
     healthcheck:
       test: ["CMD", "curl", "--fail", "--silent", "http://127.0.0.1:5000/api/version"]
       interval: 15s
