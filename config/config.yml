@@ -52,19 +52,43 @@ ffmpeg:
 # -----------------------------------------------------------------------------
 # go2rtc: Restreaming de cámaras
 # -----------------------------------------------------------------------------
+# go2rtc soporta múltiples fuentes: RTSP, MJPEG, FFmpeg exec, etc.
+# Documentación: https://github.com/AlexxIT/go2rtc
 go2rtc:
   streams:
-    # Ejemplo: descomentar y ajustar con los datos de tu cámara
+    # -------------------------------------------------------------------------
+    # Cámara de prueba 1: Video local con personas, bicicletas y autos
+    # Se reproduce en loop infinito usando ffmpeg dentro del contenedor.
+    # Video: person-bicycle-car-detection.mp4 (768x432, H.264, 12fps)
+    # -------------------------------------------------------------------------
+    video_prueba:
+      - "exec:ffmpeg -re -stream_loop -1 -i /config/test_video.mp4 -c copy -rtsp_transport tcp -f rtsp {output}"
+
+    # -------------------------------------------------------------------------
+    # Cámara de prueba 2: Webcam pública MJPEG (Japón)
+    # Stream en vivo de una cámara pública. Puede no estar disponible 24/7.
+    # -------------------------------------------------------------------------
+    webcam_publica:
+      - "http://honjin1.miemasu.net/nphMotionJpeg?Resolution=640x480&Quality=Standard"
+
+    # -------------------------------------------------------------------------
+    # Cámara de prueba 3: Stream RTSP de Wowza (video estático de prueba)
+    # Proporcionado por Wowza para testing. Loop de video de una represa.
+    # -------------------------------------------------------------------------
+    wowza_test:
+      - "rtsp://716f898c7b71.entrypoint.cloud.wowza.com:1935/app-8F9K44lJ/304679fe_stream2"
+
+    # -------------------------------------------------------------------------
+    # Ejemplo de cámara IP real (descomentar y ajustar)
+    # -------------------------------------------------------------------------
     # camara_principal:
     #   - rtsp://usuario:password@192.168.1.100:554/stream1
     # camara_principal_sub:
     #   - rtsp://usuario:password@192.168.1.100:554/stream2
-    dummy: []
 
 # -----------------------------------------------------------------------------
 # Generative AI - Ollama local en macOS
 # -----------------------------------------------------------------------------
-# En v0.17.0, genai es un objeto plano a nivel raíz (no un diccionario).
 # Ollama debe estar corriendo en macOS con el modelo descargado:
 #   ollama pull qwen3-vl:4b
 #
@@ -78,6 +102,81 @@ genai:
 # Cámaras
 # -----------------------------------------------------------------------------
 cameras:
+  # -------------------------------------------------------------------------
+  # Cámara de prueba 1: Video local en loop (personas, bicicletas, autos)
+  # Ideal para probar la detección de objetos sin hardware real.
+  # -------------------------------------------------------------------------
+  video_prueba:
+    enabled: true
+    ffmpeg:
+      inputs:
+        - path: rtsp://127.0.0.1:8554/video_prueba
+          input_args: preset-rtsp-restream
+          roles:
+            - detect
+            - record
+    detect:
+      enabled: true
+      width: 768
+      height: 432
+      fps: 5
+    objects:
+      track:
+        - person
+        - bicycle
+        - car
+      genai:
+        enabled: true
+    review:
+      genai:
+        enabled: true
+    record:
+      enabled: true
+
+  # -------------------------------------------------------------------------
+  # Cámara de prueba 2: Webcam pública MJPEG
+  # Stream en vivo. Puede tener latencia o no estar disponible 24/7.
+  # -------------------------------------------------------------------------
+  webcam_publica:
+    enabled: true
+    ffmpeg:
+      inputs:
+        - path: rtsp://127.0.0.1:8554/webcam_publica
+          input_args: preset-rtsp-restream
+          roles:
+            - detect
+    detect:
+      enabled: true
+      width: 640
+      height: 480
+      fps: 5
+    objects:
+      track:
+        - person
+        - car
+
+  # -------------------------------------------------------------------------
+  # Cámara de prueba 3: Stream RTSP Wowza (video de represa)
+  # Útil para verificar conectividad RTSP. No tiene objetos detectables.
+  # -------------------------------------------------------------------------
+  wowza_test:
+    enabled: true
+    ffmpeg:
+      inputs:
+        - path: rtsp://127.0.0.1:8554/wowza_test
+          input_args: preset-rtsp-restream
+          roles:
+            - detect
+    detect:
+      enabled: true
+      width: 640
+      height: 480
+      fps: 5
+    objects:
+      track:
+        - person
+        - car
+
   # -------------------------------------------------------------------------
   # Ejemplo de cámara IP real (descomentar y ajustar)
   # -------------------------------------------------------------------------
@@ -117,15 +216,5 @@ cameras:
   #     detections:
   #       retain:
   #         days: 10
-
-  # Cámara dummy (requerida para que Frigate inicie)
-  # Reemplazar con una cámara real cuando esté disponible
-  dummy:
-    enabled: false
-    ffmpeg:
-      inputs:
-        - path: rtsp://127.0.0.1:8554/dummy
-          roles:
-            - detect
 
 version: 0.17-0
