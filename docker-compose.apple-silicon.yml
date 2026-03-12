@@ -47,6 +47,7 @@ services:
           size: 1000000000
     environment:
       FRIGATE_RTSP_PASSWORD: "password"
+      GO2RTC_ALLOW_ARBITRARY_EXEC: "true"
     extra_hosts:
       - "host.docker.internal:host-gateway"
     depends_on:
