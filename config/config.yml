@@ -7,6 +7,8 @@
 #   - Detector Apple Silicon vía ZMQ (contenedor o nativo)
 #   - Ollama corriendo localmente en macOS (puerto 11434)
 #   - Hardware: Apple M3 Max, 128 GB RAM
+#
+# Versión de Frigate: 0.17.0 (stable-standard-arm64)
 # =============================================================================
 
 mqtt:
@@ -62,22 +64,15 @@ go2rtc:
 # -----------------------------------------------------------------------------
 # Generative AI - Ollama local en macOS
 # -----------------------------------------------------------------------------
+# En v0.17.0, genai es un objeto plano a nivel raíz (no un diccionario).
 # Ollama debe estar corriendo en macOS con el modelo descargado:
-#   ollama pull llava:13b
+#   ollama pull qwen3-vl:4b
 #
-# Modelos recomendados para vision: llava:13b, qwen3-vl:4b, llava:34b
+# Modelos recomendados: qwen3-vl:4b, qwen2.5-vl, gemma3
 genai:
-  ollama_local:
-    provider: ollama
-    base_url: http://host.docker.internal:11434
-    model: llava:13b
-    roles:
-      - vision
-      - tools
-    provider_options:
-      keep_alive: -1
-      options:
-        num_ctx: 8192
+  provider: ollama
+  base_url: http://host.docker.internal:11434
+  model: qwen3-vl:4b
 
 # -----------------------------------------------------------------------------
 # Cámaras
@@ -133,4 +128,4 @@ cameras:
           roles:
             - detect
 
-version: 0.15-0
+version: 0.17-0
