@@ -30,6 +30,7 @@ detectors:
   apple_silicon:
     type: zmq
     endpoint: tcp://frigate-detector:5555
+    request_timeout_ms: 1000
 
 # -----------------------------------------------------------------------------
 # Modelo de detección de objetos

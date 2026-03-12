@@ -71,13 +71,19 @@ class ZmqOnnxClient:
         self.session = None
         if self.model_path != "AUTO":
             self.session = self._initialize_onnx_session(providers)
+            if self.session is not None:
+                self.model_ready = True
+                self.current_model = os.path.basename(self.model_path)
+                logger.info(f"Model pre-loaded and ready: {self.model_path}")
+            else:
+                logger.error(f"Failed to pre-load model: {self.model_path}")
 
         # Preallocate zero result for error cases
         self.zero_result = np.zeros((20, 6), dtype=np.float32)
 
         logger.info(f"ZMQ ONNX client initialized with endpoint: {endpoint}")
         if self.model_path != "AUTO":
-            logger.info(f"ONNX model loaded from: {self.model_path}")
+            logger.info(f"ONNX model loaded from: {self.model_path}, ready={self.model_ready}")
         else:
             logger.info(
                 "ZMQ ONNX client started in AUTO mode - waiting for model requests"

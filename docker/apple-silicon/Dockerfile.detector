@@ -46,5 +46,7 @@ HEALTHCHECK --interval=30s --timeout=5s --retries=3 \
     CMD pgrep -f "zmq_onnx_client" || exit 1
 
 # Ejecutar el detector con CPUExecutionProvider (ARM64 NEON optimizado)
+# El modelo se monta como volumen en /opt/detector/models/yolo.onnx
+# Al pasar --model explícito, el detector lo carga al arrancar (sin esperar a Frigate)
 ENTRYPOINT ["python", "detector/zmq_onnx_client.py"]
-CMD ["--endpoint", "tcp://*:5555", "--providers", "CPUExecutionProvider"]
+CMD ["--endpoint", "tcp://*:5555", "--model", "/opt/detector/models/yolo.onnx", "--providers", "CPUExecutionProvider"]

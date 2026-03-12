@@ -54,7 +54,7 @@ services:
       mqtt:
         condition: service_started
       detector:
-        condition: service_started
+        condition: service_healthy
     healthcheck:
       test: ["CMD", "curl", "--fail", "--silent", "http://127.0.0.1:5000/api/version"]
       interval: 15s
@@ -85,9 +85,10 @@ services:
       - ./config/model_cache:/opt/detector/models
     healthcheck:
       test: ["CMD", "pgrep", "-f", "zmq_onnx_client"]
-      interval: 30s
+      interval: 10s
       timeout: 5s
-      retries: 3
+      retries: 5
+      start_period: 30s
 
   # ---------------------------------------------------------------------------
   # MQTT Broker (Mosquitto)
